@@ -45,4 +45,8 @@ test "test-input" {
     const total = @reduce(.Add, @as(@Vector(3, u32), max));
     try std.testing.expectEqual(max[0], 24000);
     try std.testing.expectEqual(total, 45000);
+
+    var result = try util.benchmark(std.testing.allocator, solve, .{@embedFile("input.txt")}, .{});
+    defer result.deinit();
+    result.printSummary();
 }
