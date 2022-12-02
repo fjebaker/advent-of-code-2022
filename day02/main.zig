@@ -1,94 +1,52 @@
 const std = @import("std");
 const util = @import("../util.zig");
 
-const Outcome = enum(u8) {
-    win = 6,
-    draw = 3,
-    lose = 0,
+const Hand = enum(u8) { rock = 1, paper = 2, scissors = 3 };
+const Outcome = enum(u8) { lose = 0, draw = 3, win = 6 };
 
-    pub fn fromChar(c: u8) Outcome {
-        return switch (c) {
-            'X' => .lose,
-            'Y' => .draw,
-            'Z' => .win,
-            else => unreachable,
-        };
-    }
-};
+fn charToOutcome(c: u8) Outcome {
+    return switch (c) {
+        'X' => .lose,
+        'Y' => .draw,
+        'Z' => .win,
+        else => unreachable,
+    };
+}
 
-const Hand = enum(u8) {
-    rock = 1,
-    paper = 2,
-    scissors = 3,
+pub fn charsToOutcome(theirs: u8, ours: u8) Outcome {
+    return ([_]Outcome{ .win, .lose, .draw })[(ours - theirs) % 3];
+}
 
-    pub fn fromChar(c: u8) Hand {
-        return switch (c) {
-            'A' => .rock,
-            'X' => .rock,
-            'B' => .paper,
-            'Y' => .paper,
-            'C' => .scissors,
-            'Z' => .scissors,
-            else => unreachable,
-        };
-    }
+pub fn charsToHand(theirs: u8, outcome: u8) Hand {
+    return ([_]Hand{.scissors, .rock, .paper})[(theirs + outcome) % 3];
+}
 
-    pub fn outcome(self_hand: Hand, other_hand: Hand) Outcome {
-        const comp: i8 = @intCast(i8, @enumToInt(other_hand)) - @intCast(i8, @enumToInt(self_hand));
-        return switch (comp) {
-            0 => .draw,
-            -1 => .win,
-            2 => .win,
-            else => .lose,
-        };
-    }
-
-};
+pub fn charToHand(c: u8) Hand {
+    return switch (c) {
+        'A', 'X' => .rock,
+        'B', 'Y' => .paper,
+        'C', 'Z' => .scissors,
+        else => unreachable,
+    };
+}
 
 const Round = struct {
     const Self = @This();
     their_hand: Hand,
     our_hand: Hand,
-    outcome: ?Outcome = null,
+    outcome: Outcome,
 
     pub fn part1(theirs: u8, ours: u8) Round {
-        return .{ .their_hand = Hand.fromChar(theirs), .our_hand = Hand.fromChar(ours) };
+        const outcome = charsToOutcome(theirs, ours);
+        return .{ .their_hand = charToHand(theirs), .our_hand = charToHand(ours), .outcome = outcome };
     }
 
-    fn handFromOutcome(their_hand: Hand, outcome: Outcome) Hand {
-        return switch (outcome) {
-            .draw => their_hand,
-            .win => switch(their_hand) {
-                .rock => .paper,
-                .scissors => .rock,
-                .paper => .scissors,
-            },
-            .lose => switch(their_hand) {
-                .rock => .scissors,
-                .scissors => .paper,
-                .paper => .rock,
-            },
-        };
-    }
-
-    pub fn part2(theirs: u8, ours: u8) Round {
-        const their_hand = Hand.fromChar(theirs);
-        const outcome = Outcome.fromChar(ours);
-        const our_hand = handFromOutcome(their_hand, outcome);
-        return .{
-            .their_hand = their_hand,
-            .our_hand = our_hand,
-            .outcome = outcome,
-        };
-    }
-
-    fn calcScore(self: *const Self, outcome: Outcome) u32 {
-        return @enumToInt(outcome) + @enumToInt(self.our_hand);
+    pub fn part2(theirs: u8, outcome: u8) Round {
+        return .{ .their_hand = charToHand(theirs), .our_hand = charsToHand(theirs, outcome), .outcome = charToOutcome(outcome) };
     }
 
     pub fn score(self: *const Round) u32 {
-        const outcome = self.outcome orelse self.our_hand.outcome(self.their_hand);
-        return self.calcScore(outcome);
+        return @enumToInt(self.outcome) + @enumToInt(self.our_hand);
     }
 };
 
@@ -98,10 +56,8 @@ fn solve(input: []const u8) [2]u32 {
     var total1: u32 = 0;
     var total2: u32 = 0;
     while (lines.next()) |line| {
-        var itt = std.mem.tokenize(u8, line, " ");
-
-        const in1 = itt.next().?[0];
-        const in2 = itt.next().?[0];
+        const in1 = line[0];
+        const in2 = line[2];
 
         const round1 = Round.part1(in1, in2);
         const round2 = Round.part2(in1, in2);
@@ -110,7 +66,7 @@ fn solve(input: []const u8) [2]u32 {
         total2 += round2.score();
     }
 
-    return .{total1, total2};
+    return .{ total1, total2 };
 }
 
 pub fn main() void {
@@ -129,46 +85,10 @@ test "test-input" {
     );
 }
 
-fn checkParsePart1(line: []const u8, out1: Hand, out2: Hand) !void {
-    var itt = std.mem.tokenize(u8, line, " ");
-    const in1 = itt.next().?[0];
-    const in2 = itt.next().?[0];
-    const round = Round.part1(in1, in2);
-    try std.testing.expect(
-        round.our_hand == out1,
-    );
-    try std.testing.expect(
-        round.their_hand == out2,
-    );
+fn checkOutcomes(theirs: u8, ours: u8, outcome: Outcome) !void {
+    try std.testing.expect(charsToOutcome(theirs, ours) == outcome);
 }
 
-test "parsing" {
-    try checkParsePart1("A X", .rock, .rock);
-    try checkParsePart1("B Y", .paper, .paper);
-    try checkParsePart1("C Z", .scissors, .scissors);
-
-    try std.testing.expect(
-        Hand.fromChar('A') == .rock,
-    );
-    try std.testing.expect(
-        Hand.fromChar('X') == .rock,
-    );
-}
-
-test "win-conditions" {
-    try std.testing.expect(
-        Hand.rock.outcome(.paper) == .lose,
-    );
-    try std.testing.expect(
-        Hand.rock.outcome(.rock) == .draw,
-    );
-    try std.testing.expect(
-        Hand.rock.outcome(.scissors) == .win,
-    );
-    try std.testing.expect(
-        Hand.scissors.outcome(.rock) == .lose,
-    );
-    try std.testing.expect(
-        Hand.scissors.outcome(.paper) == .win,
-    );
+test "test-outcomes" {
+    try checkOutcomes('A', 'X', .draw);
 }
