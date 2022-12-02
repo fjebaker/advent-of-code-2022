@@ -51,11 +51,11 @@ const Round = struct {
 };
 
 fn solve(input: []const u8) [2]u32 {
-    var lines = std.mem.tokenize(u8, input, "\n");
+    const lines = std.mem.bytesAsSlice([4]u8, input);
 
     var total1: u32 = 0;
     var total2: u32 = 0;
-    while (lines.next()) |line| {
+    for (lines) |line| {
         const in1 = line[0];
         const in2 = line[2];
 
