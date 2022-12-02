@@ -45,4 +45,5 @@ pub fn build(b: *std.build.Builder) void {
     const mode = b.standardReleaseOptions();
 
     setup_day(b, target, mode, 1);
+    setup_day(b, target, mode, 2);
 }
