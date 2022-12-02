@@ -83,6 +83,10 @@ test "test-input" {
     try std.testing.expect(
         score[1] == 12,
     );
+
+    var result = try util.benchmark(std.testing.allocator, solve, .{@embedFile("input.txt")}, .{});
+    defer result.deinit();
+    result.printSummary();
 }
 
 fn checkOutcomes(theirs: u8, ours: u8, outcome: Outcome) !void {
