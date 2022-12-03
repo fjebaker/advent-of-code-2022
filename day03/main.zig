@@ -15,17 +15,19 @@ fn setRepr(bag: []const u8) Bag {
     return set;
 }
 
+fn unpack(bag: Bag) u32 {
+    // add 1 for offset
+    return @intCast(u32, bag.findFirstSet().?) + 1;
+}
+
 fn solvePart1(line: []const u8) u32 {
     const mid = line.len / 2;
     var set = setRepr(line[0..mid]);
     set.setIntersection(setRepr(line[mid..]));
-    // add 1 for offset
-    return @intCast(u32, set.findFirstSet().?) + 1;
+    return unpack(set);
 }
 
 fn solve(input: []const u8) ![2]u32 {
-    // var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    // var allocator = gpa.allocator();
     // iterate for each line
     var lines = std.mem.split(u8, input, "\n");
 
@@ -35,7 +37,6 @@ fn solve(input: []const u8) ![2]u32 {
     var i: u8 = 0;
     while (lines.next()) |line| {
         if (line.len == 0) continue;
-        // std.debug.print("Common: {c} -> {d}\n\n", .{common, priority});
         part1 += solvePart1(line);
 
         const bag = setRepr(line);
@@ -43,12 +44,10 @@ fn solve(input: []const u8) ![2]u32 {
 
         i += 1;
         if (i == 3) {
-            i = 0;
-            // read out
-            const badge = group.findFirstSet().? + 1;
-            part2 += @intCast(u32, badge);
-            // std.debug.print("\n\n{any}\n", .{group.findFirstSet().?});
+            part2 += unpack(group);
+            // reset
             group = Bag.initFull();
+            i = 0;
         }
     }
 
