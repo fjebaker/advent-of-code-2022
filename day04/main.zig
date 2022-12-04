@@ -53,4 +53,19 @@ pub fn main() !void {
 test "test-input" {
     const sol = try solve(@embedFile("test.txt"));
     std.debug.print("Part 1: {d}\n Part 2: {d}\n", .{ sol[0], sol[1] });
+
+    var result = try util.benchmark(std.testing.allocator, solve, .{@embedFile("input.txt")}, .{});
+    defer result.deinit();
+    result.printSummary();
 }
+
+// lol this would have been plenty
+
+// if (elf1.low >= elf2.low and elf1.high <= elf2.high or elf1.low <= elf1.low and elf1.high >= elf2.high) {
+//     part1 += 1;
+// }
+
+// // is there any overlap
+// if (elf1.high >= elf2.low and elf1.low <= elf2.high) {
+//     part2 += 1;
+// }

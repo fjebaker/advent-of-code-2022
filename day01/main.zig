@@ -1,7 +1,7 @@
-const util = @import("../util.zig");
 const std = @import("std");
+const util = @import("../util.zig");
 
-pub fn updateMax(max: []u32, current: u32) void {
+pub fn updateMax(max: *[3]u32, current: u32) void {
     if (current > max[0]) {
         max[2] = max[1];
         max[1] = max[0];

@@ -62,4 +62,8 @@ pub fn main() !void {
 test "test-input" {
     const sol = try solve(@embedFile("test.txt"));
     std.debug.print("Part 1: {d}\n Part 2: {d}\n", .{ sol[0], sol[1] });
+
+    var result = try util.benchmark(std.testing.allocator, solve, .{@embedFile("input.txt")}, .{});
+    defer result.deinit();
+    result.printSummary();
 }
