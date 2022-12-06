@@ -49,4 +49,5 @@ pub fn build(b: *std.build.Builder) void {
     setup_day(b, target, mode, 3);
     setup_day(b, target, mode, 4);
     setup_day(b, target, mode, 5);
+    setup_day(b, target, mode, 6);
 }

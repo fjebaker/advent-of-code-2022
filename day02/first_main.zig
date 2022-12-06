@@ -18,7 +18,7 @@ pub fn charsToOutcome(theirs: u8, ours: u8) Outcome {
 }
 
 pub fn charsToHand(theirs: u8, outcome: u8) Hand {
-    return ([_]Hand{.scissors, .rock, .paper})[(theirs + outcome) % 3];
+    return ([_]Hand{ .scissors, .rock, .paper })[(theirs + outcome) % 3];
 }
 
 pub fn charToHand(c: u8) Hand {

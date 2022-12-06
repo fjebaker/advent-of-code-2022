@@ -4,9 +4,8 @@ const util = @import("../util.zig");
 const BitMask = std.bit_set.IntegerBitSet(26);
 
 fn findMarker(input: []const u8, size: u32) u32 {
-    const trimmed_size = input.len - size;
     var start: u32 = 0;
-    while (start < trimmed_size) : (start += 1) {
+    while (start < input.len - size) : (start += 1) {
         var mask = BitMask.initEmpty();
         const end = start + size;
         for (input[start..end]) |c| {
@@ -16,7 +15,7 @@ fn findMarker(input: []const u8, size: u32) u32 {
             return end;
         }
     }
-    unreachable;
+    @panic("No marker found!");
 }
 
 fn solve(input: []const u8) [2]u32 {
@@ -25,9 +24,16 @@ fn solve(input: []const u8) [2]u32 {
     return .{ part1, part2 };
 }
 
-pub fn main() void {
-    const sol = solve(@embedFile("input.txt"));
-    std.debug.print("Part 1: {d}\nPart 2: {d}\n", .{ sol[0], sol[1] });
+pub fn main() !void {
+    // const sol = solve(@embedFile("input.txt"));
+    // std.debug.print("Part 1: {d}\nPart 2: {d}\n", .{ sol[0], sol[1] });
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    var alloc = gpa.allocator();
+
+    var result = try util.benchmark(alloc, solve, .{@embedFile("input.txt")}, .{});
+    defer result.deinit();
+    result.printSummary();
 }
 
 test "test-input" {
@@ -36,6 +42,10 @@ test "test-input" {
     try testSolve("nppdvjthqldpwncqszvftbrmjlhg", 6, 23);
     try testSolve("nznrnfrfntjfmvfwmzdfjlvtqnbhcprsg", 10, 29);
     try testSolve("zcfzfwzzqfrljwzlrfnpqdbhtmscgvjw", 11, 26);
+
+    var result = try util.benchmark(std.testing.allocator, solve, .{@embedFile("input.txt")}, .{});
+    defer result.deinit();
+    result.printSummary();
 }
 
 fn testSolve(input: []const u8, p1: u32, p2: u32) !void {

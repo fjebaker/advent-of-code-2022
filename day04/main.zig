@@ -38,8 +38,8 @@ fn solve(input: []const u8) ![2]u32 {
         const elf1 = try parseElf(line[0..sep]);
         const elf2 = try parseElf(line[sep + 1 ..]);
         // solve parts
-        if (overlap(elf1, elf2)) part1 += 1;
-        if (overlapAtAll(elf1, elf2)) part2 += 1;
+        part1 += @boolToInt(overlap(elf1, elf2));
+        part2 += @boolToInt(overlapAtAll(elf1, elf2));
     }
 
     return .{ part1, part2 };

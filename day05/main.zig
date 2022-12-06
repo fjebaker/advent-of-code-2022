@@ -66,11 +66,7 @@ const Problem = struct {
         const offset = from_stack.items.len - instruction.number;
         const items = from_stack.items[offset..];
         try to_stack.appendSlice(items);
-        // remove
-        var i: u8 = 0;
-        while (i < instruction.number) : (i += 1) {
-            _ = from_stack.pop();
-        }
+        from_stack.shrinkRetainingCapacity(offset);
     }
 
     pub fn runInstruction9000(self: *Problem, instruction: Instruction) !void {
