@@ -1,7 +1,8 @@
 const std = @import("std");
 const util = @import("../util.zig");
 
-const BitMask = std.bit_set.IntegerBitSet(26);
+// only needs to be 26 in size but 32 is better perf
+const BitMask = std.bit_set.IntegerBitSet(32);
 
 fn findMarker(input: []const u8, comptime size: u32) u32 {
     var mask = BitMask.initEmpty();
