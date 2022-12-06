@@ -3,17 +3,17 @@ const util = @import("../util.zig");
 
 const BitMask = std.bit_set.IntegerBitSet(26);
 
-fn findMarker(input: []const u8, size: u32) u32 {
-    var start: u32 = 0;
-    while (start < input.len - size) : (start += 1) {
-        var mask = BitMask.initEmpty();
-        const end = start + size;
-        for (input[start..end]) |c| {
-            mask.set(c - 'a');
-        }
-        if (mask.count() == size) {
-            return end;
-        }
+fn findMarker(input: []const u8, comptime size: u32) u32 {
+    var mask = BitMask.initEmpty();
+    // set all inital bits
+    for (input[0..size]) |c| {
+        mask.toggle(c - 'a');
+    }
+    // toggle extremal
+    for (input[size..]) |c, i| {
+        mask.toggle(input[i] - 'a');
+        mask.toggle(c - 'a');
+        if (mask.count() == size) return @truncate(u32, i + size + 1);
     }
     @panic("No marker found!");
 }
