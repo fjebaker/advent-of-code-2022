@@ -1,133 +1,126 @@
 const std = @import("std");
 const util = @import("../util.zig");
 
-const File = struct { size: u64, name: []const u8 };
-
-const DirMap = std.StringHashMap(Dir);
-
 const TOTAL_SPACE = 70000000;
 const MINIMUM_SPACE = 30000000;
 
-const Dir = struct {
-    name: []const u8,
-    subdirs: DirMap,
-    files: ?[]File,
-    parent: ?*Dir,
-    alloc: std.mem.Allocator,
-    pub fn init(alloc: std.mem.Allocator, parent: ?*Dir, name: []const u8, files: ?[]File) Dir {
-        return .{
-            .name = name,
-            .subdirs = DirMap.init(alloc),
-            .files = files,
-            .parent = parent,
-            .alloc = alloc,
-        };
-    }
-    pub fn walkSizes(self: *const Dir, sizelist: *std.ArrayList(u64)) !void {
-        const size = self.totalSize();
-        try sizelist.append(size);
-        var ditt = self.subdirs.valueIterator();
-        while (ditt.next()) |d| {
-            try walkSizes(d, sizelist);
-        }
-    }
-    pub fn totalSize(self: *const Dir) u64 {
-        var total: u64 = 0;
-        for (self.files.?) |f| {
-            total += f.size;
-        }
-        var ditt = self.subdirs.valueIterator();
-        while (ditt.next()) |d| {
-            total += d.totalSize();
-        }
+const File = struct { size: u64, name: []const u8 };
+const Info = ?u64;
 
-        return total;
-    }
-    pub fn deinit(self: *Dir) void {
-        if (self.files) |files| self.alloc.free(files);
-        var ditt = self.subdirs.valueIterator();
-        while (ditt.next()) |d| {
-            d.deinit();
-        }
-        self.subdirs.deinit();
-    }
-    fn printIndent(_: *const Dir, indent: u64) void {
-        var i = indent;
-        while (i > 0) : (i -= 1) {
-            std.debug.print(" ", .{});
-        }
-    }
-    pub fn print(self: *const Dir, indent: u64) void {
-        self.printIndent(indent);
-        std.debug.print("{s}\n", .{self.name});
-        if (self.files) |files| for (files) |f| {
-            self.printIndent(indent + 2);
-            std.debug.print("- {d} {s}\n", .{ f.size, f.name });
-        };
-        var ditt = self.subdirs.valueIterator();
-        while (ditt.next()) |d| {
-            d.print(indent + 2);
-        }
-    }
-    pub fn assembleFiles(self: *Dir, lines: *std.mem.TokenIterator(u8)) !void {
-        var files = std.ArrayList(File).init(self.alloc);
-        // parse lines until next line is '$'
-        while (lines.next()) |line| {
-            var itt = std.mem.tokenize(u8, line, " ");
-            const info = itt.next().?;
-            const name = itt.next().?;
-            // check if new dir
-            if (info[0] != 'd') {
-                const size = try std.fmt.parseInt(u64, info, 10);
-                try files.append(.{ .size = size, .name = name });
-            }
+pub fn Tree(comptime InfoType: type, comptime LeafType: type) type {
+    return struct {
+        const Self = @This();
+        const Lookup = std.StringHashMap(Self);
 
-            if (lines.peek()) |peek| {
-                if (peek[0] == '$') break;
-            }
+        branches: Lookup,
+        leafs: []LeafType,
+        parent: ?*Self,
+        alloc: std.mem.Allocator,
+        info: InfoType,
+
+        pub fn init(alloc: std.mem.Allocator, parent: ?*Self, info: InfoType) Self {
+            return .{
+                .branches = Lookup.init(alloc),
+                .leafs = &[0]File{},
+                .parent = parent,
+                .alloc = alloc,
+                .info = info,
+            };
         }
-        self.files = files.toOwnedSlice();
+        pub fn deinit(self: *Self) void {
+            var itt = self.branches.iterator();
+            while (itt.next()) |entry| {
+                entry.value_ptr.deinit();
+            }
+            self.branches.deinit();
+            self.alloc.free(self.leafs);
+        }
+        pub fn branchIterator(self: *Self) Lookup.Iterator {
+            return self.branches.iterator();
+        }
+    };
+}
+
+const FileTree = Tree(Info, File);
+fn treeSize(tree: *FileTree) u64 {
+    // have we got it cached?
+    if (tree.info) |size| {
+        return size;
     }
-};
+    var total: u64 = 0;
+    var itt = tree.branchIterator();
+    while (itt.next()) |entry| {
+        total += treeSize(entry.value_ptr);
+    }
+    for (tree.leafs) |leaf| {
+        total += leaf.size;
+    }
+    tree.info = total;
+    return total;
+}
+pub fn walkSizes(tree: *FileTree, sizelist: *std.ArrayList(u64)) !void {
+    const tree_size = treeSize(tree);
+    try sizelist.append(tree_size);
+    var itt = tree.branchIterator();
+    while (itt.next()) |entry| {
+        try walkSizes(entry.value_ptr, sizelist);
+    }
+}
+
+pub fn assembleFiles(alloc: std.mem.Allocator, lines: *std.mem.TokenIterator(u8)) ![]File {
+    var files = std.ArrayList(File).init(alloc);
+    // parse lines until next line is '$'
+    while (lines.next()) |line| {
+        var itt = std.mem.tokenize(u8, line, " ");
+        const info = itt.next().?;
+        const name = itt.next().?;
+        // check if new dir
+        if (info[0] != 'd') {
+            const file_size = try std.fmt.parseInt(u64, info, 10);
+            try files.append(.{ .size = file_size, .name = name });
+        }
+        if (lines.peek()) |peek| if (peek[0] == '$') break;
+    }
+    return files.toOwnedSlice();
+}
 
 fn solve(input: []const u8, alloc: std.mem.Allocator) ![2]u64 {
     // parse line by line
     var lines = std.mem.tokenize(u8, input, "\n");
 
-    var root = Dir.init(alloc, null, "/", null);
+    var root = FileTree.init(alloc, null, null);
     defer root.deinit();
-    var cwd: *Dir = &root;
+    var cwd: *FileTree = &root;
     // skip first cd command
     _ = lines.next().?;
 
     while (lines.next()) |line| {
         var itt = std.mem.tokenize(u8, line, " ");
-        const leader = itt.next().?;
-        if (leader[0] != '$') @panic("not a command");
-        const cmd = itt.next().?;
+        if (itt.next().?[0] != '$') @panic("not a command");
 
+        const cmd = itt.next().?;
         if (cmd[0] == 'c') {
             // change directory
-            const nwd = itt.next().?;
-            if (nwd[0] == '.') {
+            const name = itt.next().?;
+            if (name[0] == '.') {
                 cwd = cwd.parent.?;
             } else {
-                try cwd.subdirs.put(nwd, Dir.init(alloc, cwd, nwd, null));
-                cwd = cwd.subdirs.getEntry(nwd).?.value_ptr;
+                try cwd.branches.put(name, FileTree.init(alloc, cwd, null));
+                cwd = cwd.branches.getEntry(name).?.value_ptr;
             }
         } else {
             // list
-            try cwd.assembleFiles(&lines);
+            var file_list = try assembleFiles(alloc, &lines);
+            cwd.leafs = file_list;
         }
     }
 
     // get sizes
     var sizelist = std.ArrayList(u64).init(alloc);
     defer sizelist.deinit();
-    try root.walkSizes(&sizelist);
+    try walkSizes(&root, &sizelist);
 
-    const space_needed = MINIMUM_SPACE - (TOTAL_SPACE - root.totalSize());
-
+    const space_needed = MINIMUM_SPACE - (TOTAL_SPACE - sizelist.items[0]);
     var part1: u64 = 0;
     var part2: u64 = TOTAL_SPACE;
     for (sizelist.items) |size| {
@@ -147,11 +140,19 @@ pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     var allocator = gpa.allocator();
+
     const sol = try solve(@embedFile("input.txt"), allocator);
     std.debug.print("Part 1: {d}\n Part 2: {d}\n", .{ sol[0], sol[1] });
+
+    var result = try util.benchmark(allocator, solve, .{ @embedFile("input.txt"), allocator }, .{});
+    defer result.deinit();
+    result.printSummary();
 }
 
 test "test-input" {
     const sol = try solve(@embedFile("test.txt"), std.testing.allocator);
     std.debug.print("Part 1: {d}\n Part 2: {d}\n", .{ sol[0], sol[1] });
+
+    try std.testing.expect(sol[0] == 95437);
+    try std.testing.expect(sol[1] == 24933642);
 }
