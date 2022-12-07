@@ -29,7 +29,7 @@ pub const BenchmarkResult = struct {
     }
 };
 
-fn invoke(comptime func: anytype, comptime args: std.meta.ArgsTuple(@TypeOf(func))) void {
+fn invoke(comptime func: anytype, args: std.meta.ArgsTuple(@TypeOf(func))) void {
     const ReturnType = @typeInfo(@TypeOf(func)).Fn.return_type.?;
     switch (@typeInfo(ReturnType)) {
         .ErrorUnion => {
@@ -44,7 +44,7 @@ fn invoke(comptime func: anytype, comptime args: std.meta.ArgsTuple(@TypeOf(func
 pub fn benchmark(
     alloc: std.mem.Allocator,
     comptime func: anytype,
-    comptime args: std.meta.ArgsTuple(@TypeOf(func)),
+    args: std.meta.ArgsTuple(@TypeOf(func)),
     opts: BenchmarkOptions,
 ) !BenchmarkResult {
     var count: usize = 0;
