@@ -15,13 +15,17 @@ pub fn setup_day(
     exe.setBuildMode(mode);
     exe.install();
 
+    const install_cmd = b.addInstallArtifact(exe);
+    const install_step = b.step(path, "Build specified day");
+    install_step.dependOn(&install_cmd.step);
+
     const run_cmd = exe.run();
-    run_cmd.step.dependOn(b.getInstallStep());
+    run_cmd.step.dependOn(&install_cmd.step);
     if (b.args) |args| {
         run_cmd.addArgs(args);
     }
 
-    const run_step = b.step(path, "Run the app");
+    const run_step = b.step(b.fmt("run_{s}", .{path}), "Run specified day");
     run_step.dependOn(&run_cmd.step);
 
     const exe_test = b.addTest(root_src);
@@ -51,4 +55,5 @@ pub fn build(b: *std.build.Builder) void {
     setup_day(b, target, mode, 5);
     setup_day(b, target, mode, 6);
     setup_day(b, target, mode, 7);
+    setup_day(b, target, mode, 8);
 }
