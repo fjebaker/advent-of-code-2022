@@ -60,7 +60,7 @@ fn solve(alloc: std.mem.Allocator, input: []const u8) ![2]u64 {
     var matrix_input = try unpack(alloc, input);
     defer alloc.free(matrix_input);
 
-    var Forest: Forest = .{ .input = matrix_input, .size = size, .visible = &visible };
+    var forest: Forest = .{ .input = matrix_input, .size = size, .visible = &visible };
 
     var part2: u64 = 0;
 
@@ -71,7 +71,7 @@ fn solve(alloc: std.mem.Allocator, input: []const u8) ![2]u64 {
         while (y < dim) : (y += 1) {
             var total: u64 = 1;
             inline for ([_]Direction{ .up, .down, .left, .right }) |dir| {
-                const score = Forest.scoreVisible(x, y, dir);
+                const score = forest.scoreVisible(x, y, dir);
                 total *= score;
             }
             part2 = @maximum(total, part2);
