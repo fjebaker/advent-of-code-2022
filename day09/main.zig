@@ -65,14 +65,10 @@ const Rope = struct {
         var current = self.current;
         for (self.sections) |*section, i| {
             // if we didn't update, no need to continue
-            if (!section.update(current)) break;
+            if (!section.update(current)) return;
             current = section.current;
-            // update mask only on last section
-            if (i == self.sections.len - 1) {
-                // update tracking mask
-                self.updateMask(current);
-            }
         }
+        self.updateMask(current);
     }
 
     fn updateMask(self: *Rope, position: Coord) void {
@@ -81,23 +77,6 @@ const Rope = struct {
         const coord: UnpackedCoord = position + Coord{ mid, mid };
         const index = @intCast(u32, coord[0] + coord[1] * @intCast(i32, self.dim));
         self.visited.set(index);
-    }
-
-    pub fn show(self: *const Rope) void {
-        var y: usize = 0;
-        while (y < self.dim) {
-            var x: usize = 0;
-            while (x < self.dim) {
-                if (self.visited.isSet(x + y * self.dim)) {
-                    std.debug.print("#", .{});
-                } else {
-                    std.debug.print(" ", .{});
-                }
-                x += 1;
-            }
-            std.debug.print("\n", .{});
-            y += 1;
-        }
     }
 };
 
