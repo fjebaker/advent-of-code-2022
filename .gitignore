@@ -2,3 +2,4 @@ zig-*
 *.jl
 *.lock
 *.toml
+*/input.txt
