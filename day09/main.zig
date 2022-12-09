@@ -5,66 +5,85 @@ const Coord = @Vector(2, i32);
 const UnpackedCoord = [2]i32;
 const Mask = std.bit_set.DynamicBitSet;
 
-
-
-
-const Rope = struct{
-    alloc: std.mem.Allocator,
-    previous: Coord,
+const RopeSection = struct {
+    const CallbackProto = fn (*RopeSection, Coord) void;
     current: Coord,
-    visited: Mask,
-    dim: usize,
-    staged: bool = false,
-    pub fn init(alloc: std.mem.Allocator, dim: usize) !Rope {
-        var mask = try Mask.initEmpty(alloc, dim * dim);
-        return .{
-            .alloc = alloc,
-            .current = .{0,0},
-            .previous = .{0,0},
-            .visited = mask,
-            .dim = dim
-        };
+
+    pub fn update(self: *RopeSection, current: Coord) bool {
+        const diff = current - self.current;
+        const coord_one = Coord{ 1, 1 };
+        // clamp within [-1, 1]
+        const tmp = @select(i32, diff > coord_one, coord_one, diff);
+        const delta = @select(i32, tmp < -coord_one, -coord_one, tmp);
+
+        const modify = @reduce(.Or, delta != diff);
+        if (modify) self.current += delta;
+        return modify;
     }
+};
+
+const Rope = struct {
+    alloc: std.mem.Allocator,
+    sections: []RopeSection,
+    visited: Mask,
+    current: Coord,
+    dim: usize,
+
+    pub fn init(alloc: std.mem.Allocator, dim: usize, num_sections: usize) !Rope {
+        var sections = std.ArrayList(RopeSection).init(alloc);
+        errdefer sections.deinit();
+        // populate all sections
+        var i: usize = 0;
+        while (i < num_sections) : (i += 1) {
+            try sections.append(.{ .current = .{ 0, 0 } });
+        }
+        // keep grid of all possible locations
+        var mask = try Mask.initEmpty(alloc, dim * dim);
+        return .{ .alloc = alloc, .sections = sections.toOwnedSlice(), .visited = mask, .current = .{ 0, 0 }, .dim = dim };
+    }
+
     pub fn deinit(self: *Rope) void {
         self.visited.deinit();
+        self.alloc.free(self.sections);
     }
-    fn updateMask(self: *Rope) void {
-        const mid = @intCast(i32, @divFloor(self.dim, 2));
-        // translate to middle
-        const coord : UnpackedCoord = self.previous + Coord{mid, mid};
-        const i_index = coord[0] + coord[1] * @intCast(i32, self.dim);
-        std.debug.assert(i_index > 0);
-        const index = @intCast(u32, i_index);
-        self.visited.set(index);
-    }
-    fn movedTooFar(self: *Rope, rope: Coord) bool {
-        const diff : UnpackedCoord = rope - self.previous;
-        const x = std.math.absCast(diff[0]);
-        const y = std.math.absCast(diff[1]);
-        const too_far = x > 1 or y > 1;
-        return too_far;
-    }
+
     pub fn move(self: *Rope, direction: u8, count: u32) void {
-        const delta : Coord = switch(direction) {
-            'U' => .{0, -1},
-            'D' => .{0, 1},
-            'L' => .{-1, 0},
-            'R' => .{1, 0},
+        const delta: Coord = switch (direction) {
+            'U' => .{ 0, -1 },
+            'D' => .{ 0, 1 },
+            'L' => .{ -1, 0 },
+            'R' => .{ 1, 0 },
             else => unreachable,
         };
         var i: u32 = count;
         while (i > 0) : (i -= 1) {
-            var rope = self.current;
             self.current = self.current + delta;
-            // don't set visitor mask on first move
-            if (self.movedTooFar(self.current)) {
-                self.previous = rope;
-                self.updateMask();
-                self.staged = false;
+            self.updateSections();
+        }
+    }
+
+    pub fn updateSections(self: *Rope) void {
+        var current = self.current;
+        for (self.sections) |*section, i| {
+            // if we didn't update, no need to continue
+            if (!section.update(current)) break;
+            current = section.current;
+            // update mask only on last section
+            if (i == self.sections.len - 1) {
+                // update tracking mask
+                self.updateMask(current);
             }
         }
-        // if (count == 1) self.staged = true;
     }
+
+    fn updateMask(self: *Rope, position: Coord) void {
+        // translate to middle since coords can be negative
+        const mid = @intCast(i32, @divFloor(self.dim, 2));
+        const coord: UnpackedCoord = position + Coord{ mid, mid };
+        const index = @intCast(u32, coord[0] + coord[1] * @intCast(i32, self.dim));
+        self.visited.set(index);
+    }
+
     pub fn show(self: *const Rope) void {
         var y: usize = 0;
         while (y < self.dim) {
@@ -75,7 +94,7 @@ const Rope = struct{
                 } else {
                     std.debug.print(" ", .{});
                 }
-                x+=1;
+                x += 1;
             }
             std.debug.print("\n", .{});
             y += 1;
@@ -84,25 +103,25 @@ const Rope = struct{
 };
 
 fn solve(alloc: std.mem.Allocator, input: []const u8) ![2]u32 {
-    var lines = std.mem.tokenize(u8, input, "\n");
-    var rope = try Rope.init(alloc, 500);
-    defer rope.deinit();
+    var single_rope = try Rope.init(alloc, 500, 1);
+    defer single_rope.deinit();
 
+    var full_rope = try Rope.init(alloc, 500, 9);
+    defer full_rope.deinit();
+
+    var lines = std.mem.tokenize(u8, input, "\n");
     while (lines.next()) |line| {
         const direction = line[0];
         const count = try std.fmt.parseInt(u32, line[2..], 10);
 
-        std.debug.print("{c} -> {d}\n", .{direction, count});
-        rope.move(direction, count);
-        // rope.show();
-    } 
-    const part1 = @truncate(u32, rope.visited.count()) + 1;
+        single_rope.move(direction, count);
+        full_rope.move(direction, count);
+    }
+    const part1 = @truncate(u32, single_rope.visited.count()) + 1;
+    const part2 = @truncate(u32, full_rope.visited.count()) + 1;
 
-    return .{part1,0};
-    // 6180
-    // 6192
+    return .{ part1, part2 };
 }
-
 
 pub fn main() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
@@ -111,12 +130,15 @@ pub fn main() !void {
     const sol = try solve(allocator, @embedFile("input.txt"));
     std.debug.print("Part 1: {d}\nPart 2: {d}\n", .{ sol[0], sol[1] });
 
-    // var result = try util.benchmark(allocator, solve, .{allocator, @embedFile("input.txt")}, .{});
-    // defer result.deinit();
-    // result.printSummary();
+    var result = try util.benchmark(allocator, solve, .{ allocator, @embedFile("input.txt") }, .{});
+    defer result.deinit();
+    result.printSummary();
 }
 
 test "test-input" {
+    std.debug.print("\n", .{});
     const sol = try solve(std.testing.allocator, @embedFile("test.txt"));
     std.debug.print("Part 1: {d}\nPart 2: {d}\n", .{ sol[0], sol[1] });
+    const sol2 = try solve(std.testing.allocator, @embedFile("test2.txt"));
+    std.debug.print("Part 1: {d}\nPart 2: {d}\n", .{ sol2[0], sol2[1] });
 }

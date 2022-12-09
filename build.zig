@@ -48,12 +48,9 @@ pub fn build(b: *std.build.Builder) void {
     // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall.
     const mode = b.standardReleaseOptions();
 
-    setup_day(b, target, mode, 1);
-    setup_day(b, target, mode, 2);
-    setup_day(b, target, mode, 3);
-    setup_day(b, target, mode, 4);
-    setup_day(b, target, mode, 5);
-    setup_day(b, target, mode, 6);
-    setup_day(b, target, mode, 7);
-    setup_day(b, target, mode, 8);
+    comptime var counter : usize = 1;
+    inline while (counter <= 9) {
+        setup_day(b, target, mode, counter);
+        counter += 1;
+    }
 }
