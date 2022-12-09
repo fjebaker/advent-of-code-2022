@@ -1,6 +1,5 @@
 const std = @import("std");
 const util = @import("../util.zig");
-const AtProto = fn (usize, usize) usize;
 
 const VisMask = std.bit_set.DynamicBitSet;
 const Direction = enum { left, right, up, down };
@@ -16,28 +15,24 @@ const Forest = struct {
     }
 
     pub fn scoreVisible(self: *Self, x: usize, y: usize, comptime direction: Direction) u64 {
-        var score: u64 = 1;
         const tree = self.input[y][x];
         var i: usize = x;
         var j: usize = y;
-        var k: u64 = 0;
-        while (true) {
+        var score: u64 = 0;
+        while (score < self.size) : (score += 1) {
             switch (direction) {
                 .left => i -= 1,
                 .right => i += 1,
                 .up => j -= 1,
                 .down => j += 1,
             }
-            const neighbour = self.input[j][i];
-            if (tree <= neighbour) break;
+            if (tree <= self.input[j][i]) break;
             if (!self.nextInbounds(i, j)) {
                 self.visible.set(x + y * self.size);
                 break;
             }
-            k += 1;
         }
-        score *= k + 1;
-        return score;
+        return score + 1;
     }
 };
 

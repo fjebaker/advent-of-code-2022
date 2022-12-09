@@ -6,7 +6,6 @@ const UnpackedCoord = [2]i32;
 const Mask = std.bit_set.DynamicBitSet;
 
 const RopeSection = struct {
-    const CallbackProto = fn (*RopeSection, Coord) void;
     current: Coord,
 
     pub fn update(self: *RopeSection, current: Coord) bool {
