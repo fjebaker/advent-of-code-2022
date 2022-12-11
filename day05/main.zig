@@ -126,7 +126,7 @@ fn assembleInstructions(allocator: std.mem.Allocator, input: []const u8) ![]Inst
         try instructions.append(.{ .number = number, .from = from - 1, .to = to - 1 });
     }
 
-    return instructions.toOwnedSlice();
+    return try instructions.toOwnedSlice();
 }
 
 const Solution = struct {

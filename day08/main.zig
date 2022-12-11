@@ -43,7 +43,7 @@ fn unpack(alloc: std.mem.Allocator, input: [] const u8) ![][]const u8 {
     while (lines.next()) |line| {
         try acc.append(line);
     }
-    return acc.toOwnedSlice();
+    return try acc.toOwnedSlice();
 }
 
 fn solve(alloc: std.mem.Allocator, input: []const u8) ![2]u64 {
@@ -69,7 +69,7 @@ fn solve(alloc: std.mem.Allocator, input: []const u8) ![2]u64 {
                 const score = forest.scoreVisible(x, y, dir);
                 total *= score;
             }
-            part2 = @maximum(total, part2);
+            part2 = @max(total, part2);
         }
     }
 

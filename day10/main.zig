@@ -22,10 +22,10 @@ const CRTDisplay = struct {
     }
 
     fn drawSprite(self: *CRTDisplay) void {
-        const s_index = @intCast(usize, self.clock % self.scan_line.len);
+        const s_index = self.clock % self.scan_line.len;
         const offset = std.math.absCast(self.reg_x - @intCast(i32, s_index));
         // draw characters
-        self.scan_line[s_index] = if (offset <= 1) '#' else ' ';
+        self.scan_line[@intCast(usize, s_index)] = if (offset <= 1) '#' else ' ';
         if (s_index == self.scan_line.len - 1) {
             self.drawLine();
         }

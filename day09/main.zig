@@ -38,7 +38,7 @@ const Rope = struct {
         }
         // keep grid of all possible locations
         var mask = try Mask.initEmpty(alloc, dim * dim);
-        return .{ .alloc = alloc, .sections = sections.toOwnedSlice(), .visited = mask, .current = .{ 0, 0 }, .dim = dim };
+        return .{ .alloc = alloc, .sections = try sections.toOwnedSlice(), .visited = mask, .current = .{ 0, 0 }, .dim = dim };
     }
 
     pub fn deinit(self: *Rope) void {
@@ -63,7 +63,7 @@ const Rope = struct {
 
     pub fn updateSections(self: *Rope) void {
         var current = self.current;
-        for (self.sections) |*section, i| {
+        for (self.sections) |*section| {
             // if we didn't update, no need to continue
             if (!section.update(current)) return;
             current = section.current;
