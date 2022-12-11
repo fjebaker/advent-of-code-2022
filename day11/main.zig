@@ -14,11 +14,43 @@ const Operation = struct {
             .add => value + self.value,
         };
     }
+
+    pub fn parseFromText(line: [] const u8) !Operation {
+        // split on `=`
+        const i = std.mem.indexOf(u8, line, "=").? + 1;
+        var tokens = std.mem.tokenize(u8, line[i..], " ");
+        // get operation information
+        const lhs = tokens.next().?;
+        const op_char = tokens.next().?[0];
+        const rhs = tokens.next().?;
+        // square operations will have `old` in both positions
+        if (std.mem.eql(u8, lhs, rhs)) return .{ .value = 1, .op = .square };
+        const rhs_val = try std.fmt.parseInt(u64, rhs, 10);
+        return switch (op_char) {
+            '+' => .{ .value = rhs_val, .op = .add },
+            '*' => .{ .value = rhs_val, .op = .mult },
+            else => unreachable,
+        };
+    }
 };
 
-fn lcm(a: u64, b: u64) u64 {
-    const gcd = std.math.gcd(a, b);
-    return a * b / gcd;
+fn initFifoFromText(alloc: std.mem.Allocator, line: [] const u8) !Fifo {
+    // read starting items
+    var fifo = Fifo.init(alloc);
+    errdefer fifo.deinit();
+    {
+        const i = std.mem.indexOf(u8, line, ":").? + 1;
+        var item_itt = std.mem.tokenize(u8, line[i..], ",");
+        while (item_itt.next()) |item| {
+            try fifo.writeItem(try std.fmt.parseInt(u8, item[1..], 10));
+        }
+    }
+    return fifo;
+}
+
+fn parseIntAfter(comptime T: type, line: [] const u8, after: [] const u8) !T {
+    const i = std.mem.indexOf(u8, line, after).? + after.len;
+    return std.fmt.parseInt(T, line[i..], 10);
 }
 
 const Monkey = struct {
@@ -33,54 +65,14 @@ const Monkey = struct {
         var itt = std.mem.tokenize(u8, text, "\n");
         // discard first line
         _ = itt.next();
-        // read starting items
-        var fifo = Fifo.init(alloc);
+        var fifo = try initFifoFromText(alloc, itt.next().?);
         errdefer fifo.deinit();
-        {
-            const line = itt.next().?;
-            const i = std.mem.indexOf(u8, line, ":").? + 1;
-            var item_itt = std.mem.tokenize(u8, line[i..], ",");
-            while (item_itt.next()) |item| {
-                try fifo.writeItem(try std.fmt.parseInt(u8, item[1..], 10));
-            }
-        }
         // find operation
-        var op: Operation = blk: {
-            const line = itt.next().?;
-            const i = std.mem.indexOf(u8, line, "=").? + 1;
-            var tokens = std.mem.tokenize(u8, line[i..], " ");
-            // get operation information
-            const lhs = tokens.next().?;
-            const op_char = tokens.next().?[0];
-            const rhs = tokens.next().?;
-            // square operations will have `old` in both positions
-            if (std.mem.eql(u8, lhs, rhs)) break :blk .{ .value = 1, .op = .square };
+        const op = try Operation.parseFromText(itt.next().?);
 
-            const rhs_val = try std.fmt.parseInt(u64, rhs, 10);
-            break :blk switch (op_char) {
-                '+' => .{ .value = rhs_val, .op = .add },
-                '*' => .{ .value = rhs_val, .op = .mult },
-                else => unreachable,
-            };
-        };
-
-        const testval: u64 = blk: {
-            const line = itt.next().?;
-            const i = std.mem.indexOf(u8, line, "by ").? + 3;
-            break :blk try std.fmt.parseInt(u8, line[i..], 10);
-        };
-
-        const monkey1: usize = blk: {
-            const line = itt.next().?;
-            const i = std.mem.indexOf(u8, line, "key ").? + 4;
-            break :blk try std.fmt.parseInt(u8, line[i..], 10);
-        };
-
-        const monkey2: usize = blk: {
-            const line = itt.next().?;
-            const i = std.mem.indexOf(u8, line, "key ").? + 4;
-            break :blk try std.fmt.parseInt(u8, line[i..], 10);
-        };
+        const testval = try parseIntAfter(u64, itt.next().?, "by ");
+        const monkey1 = try parseIntAfter(u64, itt.next().?, "monkey ");
+        const monkey2 = try parseIntAfter(u64, itt.next().?, "monkey ");
 
         return .{
             .items = fifo,
@@ -96,10 +88,12 @@ const Monkey = struct {
     pub fn give(self: *Monkey, item: u64) !void {
         try self.items.writeItem(item);
     }
-    pub fn inspectNext(self: *Monkey, monkeys: []Monkey) !void {
+    pub fn inspectNext(self: *Monkey, monkeys: []Monkey, mod: ?u64) !void {
         // select first item
         const item = self.items.readItem().?;
-        const worry = @divFloor(self.op.apply(item), 3);
+        const w = self.op.apply(item);
+        const worry = if (mod) |m| w % m else @divFloor(w, 3);
+
         if (worry % self.testval == 0) {
             try monkeys[self.monkey1].give(worry);
         } else {
@@ -107,9 +101,9 @@ const Monkey = struct {
         }
         self.inspected += 1;
     }
-    pub fn inspectAll(self: *Monkey, monkeys: []Monkey) !void {
+    pub fn inspectAll(self: *Monkey, monkeys: []Monkey, mod: ?u64) !void {
         while (self.items.count > 0) {
-            try self.inspectNext(monkeys);
+            try self.inspectNext(monkeys, mod);
         }
     }
 };
@@ -129,48 +123,55 @@ fn parseAll(alloc: std.mem.Allocator, input: []const u8) ![]Monkey {
     return list.toOwnedSlice();
 }
 
-fn doRound(monkeys: []Monkey) !void {
+fn doRoundPart1(monkeys: []Monkey) !void {
     for (monkeys) |*monkey| {
-        try monkey.inspectAll(monkeys);
+        try monkey.inspectAll(monkeys, null);
     }
 }
 
-fn showHoldings(monkeys: []const Monkey) void {
-    for (monkeys) |*monkey, j| {
-        std.debug.print("Monkey {d}:", .{j});
-        var i: usize = 0;
-        while (i < monkey.items.count) : (i += 1) {
-            std.debug.print(" {d}", .{monkey.items.peekItem(i)});
-        }
-        std.debug.print("\n", .{});
+fn doRoundPart2(monkeys: []Monkey) !void {
+    var lcm: u64 = 1;
+    // since all testvalues are prime, lcm is just the product
+    for (monkeys) |*monkey| lcm *= monkey.testval;
+    for (monkeys) |*monkey| {
+        try monkey.inspectAll(monkeys, lcm);
     }
+}
+
+fn getScore(alloc: std.mem.Allocator, monkeys: [] const Monkey) !u64 {
+    var accum = std.ArrayList(u64).init(alloc);
+    errdefer accum.deinit();
+    for (monkeys) |*monkey| try accum.append(monkey.inspected);
+
+    var counts = try accum.toOwnedSlice();
+    defer alloc.free(counts);
+    std.sort.sort(u64, counts, {}, std.sort.desc(u64));
+
+    return counts[0] * counts[1];
 }
 
 fn solve(alloc: std.mem.Allocator, input: []const u8) ![2]u64 {
     var monkeys = try parseAll(alloc, input);
     defer alloc.free(monkeys);
     defer for (monkeys) |*m| m.deinit();
-
-    showHoldings(monkeys);
     var i: u64 = 0;
     while (i < 20) : (i += 1) {
-        try doRound(monkeys);
+        try doRoundPart1(monkeys);
     }
-    showHoldings(monkeys);
-
-    var accum = std.ArrayList(u64).init(alloc);
-    errdefer accum.deinit();
-    for (monkeys) |*monkey| {
-        try accum.append(monkey.inspected);
+    // for part 2
+    var monkeys2 = try parseAll(alloc, input);
+    defer alloc.free(monkeys2);
+    defer for (monkeys2) |*m| m.deinit();
+    i = 0;
+    while (i < 10_000) : (i += 1) {
+        try doRoundPart2(monkeys2);
     }
-    var counts = try accum.toOwnedSlice();
-    defer alloc.free(counts);
 
-    std.sort.sort(u64, counts, {}, std.sort.desc(u64));
+    const part1 = try getScore(alloc, monkeys);
+    const part2 = try getScore(alloc, monkeys2);
 
-    const part1 = counts[0] * counts[1];
 
-    return .{ part1, 0 };
+    return .{ part1, part2};
 }
 
 pub fn main() !void {
