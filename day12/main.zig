@@ -32,12 +32,11 @@ const Iterator = struct {
 };
 
 const HeightMap = struct {
-    const ConditionProto = fn (u8, u8) bool;
     rows: usize,
     cols: usize,
     map: [][]Tile,
     alloc: std.mem.Allocator,
-    condition: *const ConditionProto,
+    is_ascending: bool = true,
 
     fn translate(i: u8) u8 {
         if (i == 'E') return 'z';
@@ -48,7 +47,6 @@ const HeightMap = struct {
     pub fn initFromInput(
         alloc: std.mem.Allocator,
         input: []const u8,
-        cond: *const ConditionProto,
     ) !HeightMap {
         var lines = std.mem.split(u8, input, "\n");
 
@@ -79,7 +77,6 @@ const HeightMap = struct {
             .alloc = alloc,
             .rows = map.len,
             .cols = map[0].len,
-            .condition = cond,
         };
     }
 
@@ -106,7 +103,7 @@ const HeightMap = struct {
             // get neighbour
             var next = &self.map[j][i];
             // ensure we can only go up 1 or down any
-            if (self.condition(translate(next.value), translate(current.value))) {
+            if (compare(translate(next.value), translate(current.value), self.is_ascending)) {
                 return next;
             }
         }
@@ -179,15 +176,15 @@ fn dijkstra(map: HeightMap, queue: *PriorityQueue, start: *Tile, target: u8) !u3
     return count;
 }
 
+fn compare(next: u8, current: u8, is_ascending: bool) bool {
+    return if (is_ascending) ascending(next, current) else ascending(current, next);
+}
 fn ascending(next: u8, current: u8) bool {
     return @intCast(i16, next) - current <= 1;
 }
-fn descending(next: u8, current: u8) bool {
-    return ascending(current, next);
-}
 
 fn solve(alloc: std.mem.Allocator, input: []const u8) ![2]u32 {
-    var map = try HeightMap.initFromInput(alloc, input, ascending);
+    var map = try HeightMap.initFromInput(alloc, input);
     defer map.deinit();
     var queue = PriorityQueue.init(alloc, {});
     defer queue.deinit();
@@ -195,7 +192,7 @@ fn solve(alloc: std.mem.Allocator, input: []const u8) ![2]u32 {
     const part1 = try dijkstra(map, &queue, map.find('S'), 'E');
 
     map.reset();
-    map.condition = descending;
+    map.is_ascending = false;
 
     const part2 = try dijkstra(map, &queue, map.find('E'), 'a');
 
@@ -208,6 +205,10 @@ pub fn main() !void {
 
     const sol = try solve(allocator, @embedFile("input.txt"));
     std.debug.print("Part 1: {d}\nPart 2: {d}\n", .{ sol[0], sol[1] });
+
+    var result = try util.benchmark(allocator, solve, .{ allocator, @embedFile("input.txt") }, .{});
+    defer result.deinit();
+    result.printSummary();
 }
 
 test "test-input" {
