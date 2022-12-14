@@ -1,16 +1,16 @@
 const std = @import("std");
 const util = @import("../util.zig");
 
-const CoordNew = util.Coord;
+const Coord = util.Coord;
 
-fn coordFromText(text: []const u8) !CoordNew {
+fn coordFromText(text: []const u8) !Coord {
     const i = std.mem.indexOf(u8, text, ",").?;
     const x = try std.fmt.parseInt(usize, text[0..i], 10);
     const y = try std.fmt.parseInt(usize, text[i + 1 ..], 10);
     return .{ x, y };
 }
 
-const GridNew = struct {
+const Cavern = struct {
     const Self = @This();
     const EMPTY = ' ';
     const BLOCKED = '#';
@@ -59,7 +59,7 @@ const GridNew = struct {
     }
 
     pub fn addBlock(self: *Self, line: []const u8) !void {
-        var coord_list = std.ArrayList(CoordNew).init(self.grid.alloc);
+        var coord_list = std.ArrayList(Coord).init(self.grid.alloc);
         defer coord_list.deinit();
         // parse input line
         var text = std.mem.tokenize(u8, line, " -> ");
@@ -98,7 +98,7 @@ const GridNew = struct {
         return y > self.last_y;
     }
 
-    fn nextStep(self: *Self, c: CoordNew) ?util.UnitVec {
+    fn nextStep(self: *Self, c: Coord) ?util.UnitVec {
         const x = util.getX(c);
         const y = util.getY(c);
         if (self.reachedVoid(y)) return null;
@@ -115,7 +115,7 @@ const GridNew = struct {
     }
 
     pub fn dropSand(self: *Self, x_init: usize) bool {
-        var coord = CoordNew{ self.xlt(x_init), 0 };
+        var coord = Coord{ self.xlt(x_init), 0 };
         while (self.nextStep(coord)) |step| {
             coord = util.addUnit(coord, step);
         }
@@ -128,21 +128,21 @@ const GridNew = struct {
 };
 
 pub fn solve(alloc: std.mem.Allocator, input: []const u8) ![2]u32 {
-    var tmp = try GridNew.init(alloc, 1000, 1000, 500);
-    defer tmp.deinit();
+    var cavern = try Cavern.init(alloc, 1000, 1000, 500);
+    defer cavern.deinit();
 
     var lines = std.mem.tokenize(u8, input, "\n");
     while (lines.next()) |line| {
-        try tmp.addBlock(line);
+        try cavern.addBlock(line);
     }
 
     var part1: u32 = 0;
-    while (!tmp.dropSand(500)) {
+    while (!cavern.dropSand(500)) {
         part1 += 1;
     }
 
-    tmp.fillWallGaps();
-    const part2 = @intCast(u32, std.math.pow(usize, (tmp.last_y + 2), 2)) - tmp.block_count;
+    cavern.fillWallGaps();
+    const part2 = @intCast(u32, std.math.pow(usize, (cavern.last_y + 2), 2)) - cavern.block_count;
     return .{ part1, part2 };
 }
 
