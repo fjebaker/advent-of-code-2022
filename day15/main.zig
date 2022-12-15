@@ -4,95 +4,59 @@ const util = @import("../util.zig");
 const Coord = struct {
     x: i64,
     y: i64,
-
     fn diff(i: i64, j: i64) i64 {
         return std.math.absInt(i - j) catch unreachable;
     }
-
     pub fn manhattan(self: *const Coord, other: Coord) i64 {
-        const dx = diff(self.x, other.x);
-        const dy = diff(self.y, other.y);
-        return dx + dy;
+        return diff(self.x, other.x) + diff(self.y, other.y);
     }
-
     pub fn distToHorizontal(self: *const Coord, y: i64) i64 {
         return diff(self.y, y);
+    }
+    pub fn fromText(text: []const u8) !Coord {
+        const xi = std.mem.indexOf(u8, text, "x=").? + 2;
+        const comma = std.mem.indexOf(u8, text[xi..], ",").? + xi;
+        const x = try std.fmt.parseInt(i64, text[xi..comma], 10);
+        const y = try std.fmt.parseInt(i64, text[comma + 4 ..], 10);
+        return .{ .x = x, .y = y };
     }
 };
 
 const Range = struct {
     x1: i64,
     x2: i64,
-    // binary operations assume sorted
+    // binary operations assume sorted, i.e. self < other
     pub fn deintersect(self: *Range, other: *Range) void {
-        // deal with ranges that entirely contain eachother
+        // deal with ranges that entirely contain eachother by splitting domain
         if (self.x1 <= other.x1 and self.x2 >= other.x2) {
             other.x2 = self.x2;
             self.x2 = other.x1 - 1;
         }
         if (self.x2 >= other.x1) {
             self.x2 = other.x1 - 1;
-            if (self.x2 > other.x2) unreachable;
-        }
-        // else if (self.x1 <= other.x2) {
-        //     self.x1 = other.x2 + 1;
-        // }
-    }
-    // assumes other is before self
-    pub fn trim(self: *Range, other: Range) void {
-        if (other.x2 >= self.x1) {
-            self.x1 = other.x2 + 1;
         }
     }
     pub fn length(self: *const Range) i64 {
         return 1 + self.x2 - self.x1;
     }
-    pub fn gapBetween(self: *const Range, other: Range) bool {
-        const x = @max(0, other.x1);
-        return x > self.x1;
-    }
 };
-
-fn parseTextToCoord(text: []const u8) !Coord {
-    const xi = std.mem.indexOf(u8, text, "x=").? + 2;
-    const comma = std.mem.indexOf(u8, text[xi..], ",").? + xi;
-    const x = try std.fmt.parseInt(i64, text[xi..comma], 10);
-    const y = try std.fmt.parseInt(i64, text[comma + 4 ..], 10);
-    return .{ .x = x, .y = y };
-}
 
 const Sensor = struct {
     loc: Coord,
     beacon: Coord,
-    // manhattan distance to closest beacon
-    distance: i64,
-
+    radius: i64,
     pub fn initFromLine(line: []const u8) !Sensor {
         const i = std.mem.indexOf(u8, line, ":").?;
-        const sensor_info = line[0..i];
-        const beacon_info = line[i + 1 ..];
-        const loc = try parseTextToCoord(sensor_info);
-        const beacon = try parseTextToCoord(beacon_info);
-        return .{ .loc = loc, .beacon = beacon, .distance = loc.manhattan(beacon) };
+        const loc = try Coord.fromText(line[0..i]);
+        const beacon = try Coord.fromText(line[i + 1 ..]);
+        return .{ .loc = loc, .beacon = beacon, .radius = loc.manhattan(beacon) };
     }
-
-    pub fn halfPointsOnHorizontal(self: *const Sensor, y: i64) i64 {
-        const depth = self.distance - self.loc.distToHorizontal(y);
-        if (depth > 0) {
-            return depth;
-        }
-        return 0;
-    }
-
     pub fn rangeOnHorizontal(self: *const Sensor, y: i64) ?Range {
-        const points = self.halfPointsOnHorizontal(y);
-        if (points > 0) {
-            const x1 = self.loc.x - points;
-            const x2 = self.loc.x + points;
-            return .{ .x1 = @min(x1, x2), .x2 = @max(x1, x2) };
+        const depth = self.radius - self.loc.distToHorizontal(y);
+        if (depth > 0) {
+            return .{ .x1 = self.loc.x - depth, .x2 = self.loc.x + depth };
         } else return null;
     }
-
     pub fn beaconOnHorizontal(self: *const Sensor, y: i64) bool {
         return self.beacon.y == y;
     }
@@ -115,12 +79,10 @@ fn parseSensors(alloc: std.mem.Allocator, input: []const u8) ![]Sensor {
 const State = struct {
     const BeaconHashmap = std.AutoHashMap(Coord, bool);
     const RangeList = std.ArrayList(Range);
-
     map: BeaconHashmap,
     ranges: RangeList,
     y_row: i64 = 0,
     beacon_count: i64 = 0,
-
     pub fn init(alloc: std.mem.Allocator, row: i64) State {
         return .{
             .map = BeaconHashmap.init(alloc),
@@ -128,12 +90,10 @@ const State = struct {
             .y_row = row,
         };
     }
-
     pub fn deinit(self: *State) void {
         self.map.deinit();
         self.ranges.deinit();
     }
-
     pub fn addSensor(self: *State, sensor: Sensor) !void {
         if (sensor.rangeOnHorizontal(self.y_row)) |range| {
             if (sensor.beaconOnHorizontal(self.y_row)) {
@@ -145,88 +105,119 @@ const State = struct {
             try self.ranges.append(range);
         }
     }
+    fn ascending(_: void, r1: Range, r2: Range) bool {
+        return r1.x1 < r2.x1;
+    }
+    fn countObscured(self: *State) i64 {
+        var count: i64 = 0;
+        std.sort.sort(Range, self.ranges.items, {}, ascending);
+        for (self.ranges.items) |*range, i| {
+            if (i + 1 < self.ranges.items.len) {
+                const next = &self.ranges.items[i + 1];
+                range.deintersect(next);
+            }
+            count += range.length();
+        }
+        return count - self.beacon_count;
+    }
 };
 
-fn ascending(_: void, r1: Range, r2: Range) bool {
-    return r1.x1 < r2.x1;
-}
-
-pub fn uniquePoints(ranges: []Range) i64 {
-    var count: i64 = 0;
-    std.sort.sort(Range, ranges, {}, ascending);
-    for (ranges) |*range, i| {
-        if (i + 1 < ranges.len) {
-            const next = &ranges[i + 1];
-            range.deintersect(next);
+fn contains(sensors: []const Sensor, c: Coord) bool {
+    for (sensors) |s| {
+        if (s.loc.manhattan(c) <= s.radius) {
+            return true;
         }
-        count += range.length();
     }
-    return count;
+    return false;
 }
 
-// const Y_ROW = 2000000;
-// const MAX_COORD = 4000000;
-fn solve(alloc: std.mem.Allocator, input: []const u8, part1_row: i64, max_coord: i64) ![2]i64 {
+fn increment(map: *std.AutoHashMap(i64, u64), val: i64) !void {
+    const new_value = if (map.get(val)) |old| old + 1 else 1;
+    try map.put(val, new_value);
+}
+
+fn solveForEmpty(alloc: std.mem.Allocator, sensors: []const Sensor) !Coord {
+    var a_coeffs = std.AutoHashMap(i64, u64).init(alloc);
+    defer a_coeffs.deinit();
+    var b_coeffs = std.AutoHashMap(i64, u64).init(alloc);
+    defer b_coeffs.deinit();
+    for (sensors) |s| {
+        const extended = s.radius + 1;
+        try increment(&a_coeffs, s.loc.y - s.loc.x + extended);
+        try increment(&a_coeffs, s.loc.y - s.loc.x - extended);
+        try increment(&b_coeffs, s.loc.y + s.loc.x + extended);
+        try increment(&b_coeffs, s.loc.y + s.loc.x - extended);
+    }
+    var a_possible = std.ArrayList(i64).init(alloc);
+    var b_possible = std.ArrayList(i64).init(alloc);
+    defer a_possible.deinit();
+    defer b_possible.deinit();
+    {
+        var a_itt = a_coeffs.iterator();
+        while (a_itt.next()) |entry| {
+            const a = entry.key_ptr.*;
+            const n = entry.value_ptr.*;
+            if (n >= 2) try a_possible.append(a);
+        }
+    }
+    {
+        var b_itt = b_coeffs.iterator();
+        while (b_itt.next()) |entry| {
+            const b = entry.key_ptr.*;
+            const n = entry.value_ptr.*;
+            if (n >= 2) try b_possible.append(b);
+        }
+    }
+    for (a_possible.items) |a| {
+        for (b_possible.items) |b| {
+            if (a >= b) continue;
+            const c: Coord = .{ .x = @divFloor(b - a, 2), .y = @divFloor(b + a, 2) };
+            if (c.y < 0) continue;
+            if (!contains(sensors, c)) return c;
+        }
+    }
+    unreachable;
+}
+
+fn solve(alloc: std.mem.Allocator, input: []const u8, part1_row: i64) ![2]i64 {
     var sensors = try parseSensors(alloc, input);
     defer alloc.free(sensors);
 
-    var part1: ?i64 = null;
-    var part2: ?Coord = null;
-    var row: i64 = 10;
-    while (row < max_coord) : (row += 1) {
-        // std.debug.print("\n{d}:\n", .{row});
-        var total_range = Range{ .x1 = 0, .x2 = max_coord };
+    var state = State.init(alloc, part1_row);
+    defer state.deinit();
+    for (sensors) |sensor| try state.addSensor(sensor);
 
-        var state = State.init(alloc, row);
-        defer state.deinit();
-        for (sensors) |sensor| try state.addSensor(sensor);
+    const part1 = state.countObscured();
 
-        var ranges = try state.ranges.toOwnedSlice();
-        defer alloc.free(ranges);
+    const coord = try solveForEmpty(alloc, sensors);
+    const part2 = coord.x * 4000000 + coord.y;
 
-        // sort and trim ranges
-        if (row == part1_row) {
-            part1 = uniquePoints(ranges) - state.beacon_count;
-        } else {
-            _ = uniquePoints(ranges);
-        }
-        // shortcut
-        if (part1 != null and part2 != null) break;
-
-        // find if there are any gaps
-        for (ranges) |range| {
-            if (!total_range.gapBetween(range)) {
-                // std.debug.print("{d} to {d}, range: {d} to {d}\n", .{ total_range.x1, total_range.x2, range.x1, range.x2 });
-                total_range.trim(range);
-            } else {
-                // we found our coordinate
-                if (part2 == null) {
-                    part2 = .{ .x = total_range.x1, .y = row };
-                    // skip directly to part 1
-                    row = part1_row - 1;
-                }
-                break;
-            }
-        }
-    }
-
-    return .{ part1.?, part2.?.x * 4000000 + part2.?.y };
+    return .{ part1, part2 };
 }
 
 pub fn main() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     var allocator = arena.allocator();
 
-    const sol = try solve(allocator, @embedFile("input.txt"), 2000000, 2 * 2000000);
+    const sol = try solve(allocator, @embedFile("input.txt"), 2000000);
     std.debug.print("Part 1: {d}\nPart 2: {d}\n", .{ sol[0], sol[1] });
 
-    var result = try util.benchmark(allocator, solve, .{ allocator, @embedFile("input.txt"), 2000000, 2 * 2000000 }, .{ .warmup = 5, .trials = 10 });
+    var result = try util.benchmark(
+        allocator,
+        solve,
+        .{
+            allocator,
+            @embedFile("input.txt"),
+            2000000,
+        },
+        .{},
+    );
     defer result.deinit();
     result.printSummary();
 }
 
 test "test-input" {
     std.debug.print("\n", .{});
-    const sol = try solve(std.testing.allocator, @embedFile("test.txt"), 10, 20);
+    const sol = try solve(std.testing.allocator, @embedFile("test.txt"), 10);
     std.debug.print("Part 1: {d}\nPart 2: {d}\n", .{ sol[0], sol[1] });
 }
