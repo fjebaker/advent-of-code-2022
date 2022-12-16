@@ -31,11 +31,11 @@ fn invoke(comptime func: anytype, args: std.meta.ArgsTuple(@TypeOf(func))) void 
     const ReturnType = @typeInfo(@TypeOf(func)).Fn.return_type.?;
     switch (@typeInfo(ReturnType)) {
         .ErrorUnion => {
-            _ = @call(.{ .modifier = .never_inline }, func, args) catch {
+            _ = @call(.never_inline, func, args) catch {
                 // std.debug.panic("Benchmarked function returned error {s}", .{err});
             };
         },
-        else => _ = @call(.{ .modifier = .never_inline }, func, args),
+        else => _ = @call(.never_inline, func, args),
     }
 }
 
