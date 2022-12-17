@@ -95,7 +95,6 @@ const Chamber = struct {
     }
     pub fn dropRock(self: *Chamber) !void {
         // ensure we have capacity
-        std.debug.print("New shape: max height: {d}\n", .{self.max_height});
         try self.fillVoid();
         // get next rock shape
         var rock: Rock = @intToEnum(Shapes, @rem(self.cycle, 5));
@@ -105,14 +104,11 @@ const Chamber = struct {
         // 0 is floor
         var y: usize = self.max_height + 4;
         // first shift
-        // std.debug.print("({d}, {d})\n", .{x, y});
         x = self.shift(x, y, rock);
         while (self.checkCollision(x, y - 1, rock)) {
             y -= 1;
-            // std.debug.print("({d}, {d})\n", .{x, y});
             x = self.shift(x, y, rock);
         }
-        // std.debug.print("Collided! Fixing shape @ ({d}, {d}).\n\n", .{x, y});
         self.fix(x, y, rock);
         self.max_height = self.getMaxHeight();
     }
@@ -144,8 +140,7 @@ const Chamber = struct {
     }
     fn fix(self: *Chamber, x: usize, y: usize, rock: Rock) void {
         const rows = rock.get();
-        const width = rock.width();
-        const offset = @intCast(u3, @min(6 - width, x));
+        const offset = @intCast(u3, x);
         for (rows) |row, i| {
             // shift into right location
             const mask = row << offset;
@@ -157,9 +152,7 @@ const Chamber = struct {
     fn checkCollision(self: *const Chamber, x: usize, y: usize, rock: Rock) bool {
         if (y > self.max_height + 1) return true;
         const rows = rock.get();
-        const width = rock.width();
-        // make sure we don't shift passed allowed domain
-        const offset = @intCast(u3, @min(6 - width, x));
+        const offset = @intCast(u3, x);
         for (rows) |row, i| {
             // shift into right location
             const mask = row << offset;
@@ -195,10 +188,10 @@ fn solve(alloc: std.mem.Allocator, input: []const u8) ![2]usize {
     var chamber = try Chamber.init(alloc, input);
     defer chamber.deinit();
     var i: usize = 0;
-    while (i < 11) : (i += 1) {
+    while (i < 2022) : (i += 1) {
         try chamber.dropRock();
     }
-    chamber.printAll();
+    // chamber.printAll();
     // std.debug.print("{s}\n", .{chamber.jets});
     return .{ chamber.max_height, 0 };
 }
