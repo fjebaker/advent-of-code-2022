@@ -1,4 +1,5 @@
 const std = @import("std");
+const util = @import("../util.zig");
 
 const ChamberRow = u8;
 const Shapes = enum { horizontal, plus, lshape, vertical, square };
@@ -43,6 +44,7 @@ const Rock = union(Shapes) {
         };
         pub const width = 2;
     },
+    // surely there is a nicer way to do this??
     pub fn get(self: Rock) []const ChamberRow {
         return switch (self) {
             .horizontal => |shape| &@TypeOf(shape).mask,
@@ -129,11 +131,11 @@ const Chamber = struct {
             '<' => -1,
             else => unreachable,
         };
-        const width = rock.width();
+        // ensure x is valid
         var new_x = @intCast(usize, std.math.clamp(
             @intCast(i32, x) + dx,
             0,
-            @intCast(i32, 7 - width),
+            @intCast(i32, 7 - rock.width()),
         ));
         if (self.checkCollision(new_x, y, rock)) return new_x;
         return x;
@@ -163,37 +165,122 @@ const Chamber = struct {
         }
         return true;
     }
-    pub fn printAll(self: *const Chamber) void {
-        var i: usize = self.rows.items.len - 1;
-        while (i > 0) : (i -= 1) {
-            std.debug.print("{d:>3}  ", .{i});
-            const row = self.rows.items[i];
-            self.printRow(row);
-            std.debug.print("\n", .{});
+    const CycleInfo = struct { mu: usize, lambda: usize };
+    pub fn findCycle(self: *const Chamber) ?CycleInfo {
+        // add a favourite prime heuristic since we know the cycle frequency must
+        // be at least the shape frequency, else will underestimate lambda
+        const heuristic = 13;
+        // use Floyd's algorithm
+        const f = self.rows.items;
+        // miss out the floor
+        var tortoise: usize = 2;
+        var hare: usize = 3;
+        while (!std.mem.eql(
+            u8,
+            f[tortoise .. tortoise + heuristic],
+            f[hare .. hare + heuristic],
+        )) {
+            tortoise += 1;
+            hare += 2;
+            if (hare + heuristic >= f.len) return null;
         }
-        std.debug.print("     0 . 2 . 4 . 6 \n", .{});
-    }
-    fn printRow(_: *const Chamber, row: u8) void {
-        var i: usize = 0;
-        while (i < 8) : (i += 1) {
-            const mask = @shlExact(@as(u8, 1), @intCast(u3, i));
-            const val = row & mask;
-            const c: u8 = if (val != 0) '#' else ' ';
-            std.debug.print("{c} ", .{c});
+        // find first position of cycle
+        var mu: usize = 1;
+        tortoise = 1;
+        while (!std.mem.eql(
+            u8,
+            f[tortoise .. tortoise + heuristic],
+            f[hare .. hare + heuristic],
+        )) {
+            tortoise += 1;
+            hare += 1;
+            mu += 1;
+            if (hare + heuristic >= f.len) return null;
         }
+        // find length of cycle
+        var lambda: usize = 1;
+        hare = tortoise + 1;
+
+        while (!std.mem.eql(
+            u8,
+            f[tortoise .. tortoise + heuristic],
+            f[hare .. hare + heuristic],
+        )) {
+            hare += 1;
+            lambda += 1;
+        }
+        return .{ .mu = mu, .lambda = lambda };
     }
 };
+
+pub fn printAll(items: []const u8) void {
+    var i: usize = items.len - 1;
+    while (i > 0) : (i -= 1) {
+        std.debug.print("{d:>3}  ", .{i});
+        const row = items[i];
+        printRow(row);
+        std.debug.print("\n", .{});
+    }
+    std.debug.print("     0 . 2 . 4 . 6 \n", .{});
+}
+
+fn printRow(row: u8) void {
+    var i: usize = 0;
+    while (i < 8) : (i += 1) {
+        const mask = @shlExact(@as(u8, 1), @intCast(u3, i));
+        const val = row & mask;
+        const c: u8 = if (val != 0) '#' else ' ';
+        std.debug.print("{c} ", .{c});
+    }
+}
 
 fn solve(alloc: std.mem.Allocator, input: []const u8) ![2]usize {
     var chamber = try Chamber.init(alloc, input);
     defer chamber.deinit();
+
+    const target = 1000000000000;
+    var part1: usize = 0;
+
     var i: usize = 0;
-    while (i < 2022) : (i += 1) {
+    const cycle = blk: {
+        while (i < target) : (i += 1) {
+            try chamber.dropRock();
+            // start at 0 so we do 2021
+            if (i == 2021) {
+                part1 = chamber.max_height;
+            } else if (i > 2021) {
+                if (chamber.findCycle()) |cycle| break :blk cycle;
+            }
+        }
+        unreachable;
+    };
+    const rock_period = blk: {
+        // keep going until we've rounded off the cycle, accounting for floor
+        while (@rem(chamber.max_height - (cycle.mu - 1), cycle.lambda) != 0) {
+            try chamber.dropRock();
+        }
+        // drop a rock for good luck (also to get into the cycle)
+        var count: usize = 1;
+        try chamber.dropRock();
+        // now measure
+        while (@rem(chamber.max_height - (cycle.mu - 1), cycle.lambda) != 0) {
+            try chamber.dropRock();
+            count += 1;
+        }
+        break :blk count;
+    };
+
+    // maffs
+    const target_diff = target - chamber.cycle;
+    const cycles_remaining = @divTrunc(target_diff, rock_period);
+
+    // and drop the rest
+    var remainder = @rem(target_diff, rock_period);
+    while (remainder > 0) : (remainder -= 1) {
         try chamber.dropRock();
     }
-    // chamber.printAll();
-    // std.debug.print("{s}\n", .{chamber.jets});
-    return .{ chamber.max_height, 0 };
+    const part2 = chamber.max_height + (cycle.lambda * cycles_remaining);
+    return .{ part1, part2 };
 }
 
 pub fn main() !void {
@@ -203,9 +290,9 @@ pub fn main() !void {
     const sol = try solve(allocator, @embedFile("input.txt"));
     std.debug.print("Part 1: {d}\nPart 2: {d}\n", .{ sol[0], sol[1] });
 
-    // var result = try util.benchmark(allocator, solve, .{ allocator, @embedFile("input.txt") }, .{ .warmup = 5, .trials = 10 });
-    // defer result.deinit();
-    // result.printSummary();
+    var result = try util.benchmark(allocator, solve, .{ allocator, @embedFile("input.txt") }, .{ .warmup = 5, .trials = 10 });
+    defer result.deinit();
+    result.printSummary();
 }
 
 test "test-input" {
