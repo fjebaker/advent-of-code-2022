@@ -44,7 +44,11 @@ const Grid3D = struct {
     pub fn set(self: *Grid3D, x: usize, y: usize, z: usize, value: u8) void {
         self.grid[self.at(x, y, z)] = value;
     }
-    fn calcAdjecent(self: *const Grid3D, comptime indexer: fn (*const Grid3D, usize, usize, usize) usize) u32 {
+    fn calcAdjecent(
+        self: *const Grid3D,
+        comptime indexer: fn (*const Grid3D, usize, usize, usize) usize,
+    ) u32 {
+        // if i could be bothered, this would be really nice to vectorize
         var total: u32 = 0;
         var i: usize = 0;
         while (i < self.dim) : (i += 1) {
@@ -115,9 +119,11 @@ const Grid3D = struct {
 };
 
 fn solve(alloc: std.mem.Allocator, input: []const u8) ![2]u32 {
+    // guess a hardcoded size for the grid
     var grid = try Grid3D.fromInput(alloc, 24, input);
     defer grid.deinit();
     const part1 = grid.surfaceArea();
+    // can't really reuse any of part 1 for part 2
     const part2 = try grid.floodFill();
     return .{ part1, part2 };
 }
