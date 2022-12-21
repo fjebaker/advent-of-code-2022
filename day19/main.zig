@@ -230,26 +230,6 @@ const Factory = struct {
         var state = FactoryState{ .parent = null, .factory = self.* };
         return state.recursiveSolve();
     }
-
-    pub fn prettyPrint(self: *const Factory) void {
-        std.debug.print(
-            \\ Factory: Time-Remaining {d} (id={d})
-            \\ Bots:       ORE {d:3>} : CLAY {d:3>} : OBS {d:3>} : GEODE {d:3>}
-            \\ Resources:  ORE {d:3>} : CLAY {d:3>} : OBS {d:3>} : GEODE {d:3>}
-            \\
-        , .{
-            self.time_remaining,
-            self.blueprint.id,
-            self.bots.ore,
-            self.bots.clay,
-            self.bots.obsidian,
-            self.bots.geode,
-            self.res.ore,
-            self.res.clay,
-            self.res.obsidian,
-            self.res.geode,
-        });
-    }
 };
 
 pub fn main() !void {
@@ -260,7 +240,7 @@ pub fn main() !void {
         if (blueprint.len == 0) continue;
         var factory = Factory.new(try Blueprint.fromInput(blueprint));
         const score = factory.depthFirstSolve();
-        std.debug.print("Best for id={d}: {d}\n", .{ factory.blueprint.id, score });
+        // std.debug.print("Best for id={d}: {d}\n", .{ factory.blueprint.id, score });
         total_quality += factory.blueprint.id * score;
     }
     lines.reset();
@@ -273,7 +253,7 @@ pub fn main() !void {
         factory.time_remaining = 32;
         const score = factory.depthFirstSolve();
         if (blueprint.len == 0) continue;
-        std.debug.print("Best for id={d}: {d}\n", .{ factory.blueprint.id, score });
+        // std.debug.print("Best for id={d}: {d}\n", .{ factory.blueprint.id, score });
         part2 *= score;
     }
     std.debug.print("Part1: {d}\nPart2: {d}\n", .{ total_quality, part2 });
@@ -286,27 +266,6 @@ test "test-parsing" {
     _ = lines.next();
     var bp = try Blueprint.fromInput(lines.next().?);
     var factory = Factory.new(bp);
-    // {
-    //     const time = factory.timeToBuild(.ore).?;
-    //     try std.testing.expectEqual(time, 5);
-    // }
-    // {
-    //     const time = factory.timeToBuild(.clay).?;
-    //     try std.testing.expectEqual(time, 3);
-    // }
-    // {
-    //     const time = factory.timeToBuild(.obsidian);
-    //     try std.testing.expect(time == null);
-    // }
-
-    factory.prettyPrint();
-    // factory.buildBot(.clay, factory.timeToBuild(.clay).?);
-    // factory.prettyPrint();
-    // factory.buildBot(.clay, factory.timeToBuild(.clay).?);
-    // factory.prettyPrint();
-    // factory.buildBot(.clay, factory.timeToBuild(.clay).?);
-    // factory.prettyPrint();
-    // std.debug.print("{any}\n", .{factory});
     const best = factory.depthFirstSolve();
     std.debug.print("Best: {d}\n", .{best});
 }
