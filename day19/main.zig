@@ -59,14 +59,27 @@ const Blueprint = struct {
         return cost;
     }
     pub fn fromInput(input: []const u8) !Blueprint {
-        const id = try std.fmt.parseInt(u32, input[10..11], 10);
-        var cost_info = std.mem.tokenize(u8, input[12..], ".");
+        const end = std.mem.indexOf(u8, input, ":").?;
+        const id = try std.fmt.parseInt(u32, input[10..end], 10);
+        var cost_info = std.mem.tokenize(u8, input[end + 1 ..], ".");
         return .{ .id = id, .costs = .{
             .ore = try parseCost(cost_info.next().?),
             .clay = try parseCost(cost_info.next().?),
             .obsidian = try parseCost(cost_info.next().?),
             .geode = try parseCost(cost_info.next().?),
         } };
+    }
+    pub fn maximums(self: *const Blueprint) ResourceList {
+        var maxs: ResourceList = .{};
+        inline for (ResourceFields) |field| {
+            var maximum: u32 = 0;
+            inline for (ResourceFields) |bot| {
+                const bot_cost = @field(@field(self.costs, bot.name), field.name);
+                maximum = @max(bot_cost, maximum);
+            }
+            @field(maxs, field.name) = maximum;
+        }
+        return maxs;
     }
 };
 
@@ -90,28 +103,33 @@ const FactoryState = struct {
         // assing the copy of the factory state as a node in the network
         // attempt recursively solve
         // also have the fiducial case where we don't do anything and let the timer run out
-        var best_score: u32 = state.score();
 
         const time_remaining = state.factory.time_remaining;
-        if (time_remaining == 0) return best_score;
-        // keep building until there is no time left
+        // no point building new on 1 or 2
+        if (time_remaining < 2) {
+            state.factory.fastForwardRemaining();
+            return state.score();
+        }
 
+        var best_score: u32 = state.score();
         inline for (ResourceFields) |_, i| {
             const resource = @intToEnum(BotType, i);
-            const time = state.factory.timeToBuild(resource);
-            if (time) |t| {
-                // skip if we don't have time
-                const have_time = t <= time_remaining;
-                if (have_time) {
-                    var copy: Factory = state.factory;
-                    copy.buildBot(resource, t);
-                    // tally how many geodes we have
-                    var new_state: FactoryState = .{
-                        .parent = &state.factory,
-                        .factory = copy,
-                    };
-                    const new_score = recursiveSolve(&new_state);
-                    best_score = @max(new_score, best_score);
+            if (state.factory.needs(resource)) {
+                const time = state.factory.timeToBuild(resource);
+                if (time) |t| {
+                    // skip if we don't have time
+                    const have_time = t <= time_remaining;
+                    if (have_time) {
+                        var copy: Factory = state.factory;
+                        copy.buildBot(resource, t);
+                        // tally how many geodes we have
+                        var new_state: FactoryState = .{
+                            .parent = &state.factory,
+                            .factory = copy,
+                        };
+                        const new_score = recursiveSolve(&new_state);
+                        best_score = @max(new_score, best_score);
+                    }
                 }
             }
         }
@@ -198,6 +216,16 @@ const Factory = struct {
         return longest;
     }
 
+    pub fn needs(self: *const Factory, bot: BotType) bool {
+        const maxs = self.blueprint.maximums();
+        switch (bot) {
+            .geode => return true,
+            .obsidian => return maxs.obsidian >= self.bots.obsidian,
+            .clay => return maxs.clay >= self.bots.clay,
+            .ore => return maxs.ore >= self.bots.ore,
+        }
+    }
+
     pub fn depthFirstSolve(self: *Factory) u32 {
         var state = FactoryState{ .parent = null, .factory = self.* };
         return state.recursiveSolve();
@@ -223,6 +251,33 @@ const Factory = struct {
         });
     }
 };
+
+pub fn main() !void {
+    const input = @embedFile("input.txt");
+    var lines = std.mem.split(u8, input, "\n");
+    var total_quality: u32 = 0;
+    while (lines.next()) |blueprint| {
+        if (blueprint.len == 0) continue;
+        var factory = Factory.new(try Blueprint.fromInput(blueprint));
+        const score = factory.depthFirstSolve();
+        std.debug.print("Best for id={d}: {d}\n", .{ factory.blueprint.id, score });
+        total_quality += factory.blueprint.id * score;
+    }
+    lines.reset();
+    var part2: u32 = 1;
+    var i: u32 = 0;
+    while (i < 3) : (i += 1) {
+        // only do this for three
+        const blueprint = lines.next().?;
+        var factory = Factory.new(try Blueprint.fromInput(blueprint));
+        factory.time_remaining = 32;
+        const score = factory.depthFirstSolve();
+        if (blueprint.len == 0) continue;
+        std.debug.print("Best for id={d}: {d}\n", .{ factory.blueprint.id, score });
+        part2 *= score;
+    }
+    std.debug.print("Part1: {d}\nPart2: {d}\n", .{ total_quality, part2 });
+}
 
 test "test-parsing" {
     std.debug.print("\n\n", .{});
