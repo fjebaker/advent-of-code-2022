@@ -200,8 +200,7 @@ fn solve(alloc: std.mem.Allocator, input: []const u8) ![2]u32 {
 }
 
 pub fn main() !void {
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    var allocator = arena.allocator();
+    var allocator = std.heap.c_allocator;
 
     const sol = try solve(allocator, @embedFile("input.txt"));
     std.debug.print("Part 1: {d}\nPart 2: {d}\n", .{ sol[0], sol[1] });

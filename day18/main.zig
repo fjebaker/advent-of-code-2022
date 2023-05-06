@@ -138,7 +138,6 @@ pub fn main() !void {
     var result = try util.benchmark(allocator, solve, .{ allocator, @embedFile("input.txt") }, .{ .warmup = 5, .trials = 10 });
     defer result.deinit();
     result.printSummary();
-    // too low 4454
 }
 
 test "test-input" {

@@ -202,16 +202,11 @@ pub fn main() !void {
     const sol = try solve(allocator, @embedFile("input.txt"), 2000000);
     std.debug.print("Part 1: {d}\nPart 2: {d}\n", .{ sol[0], sol[1] });
 
-    var result = try util.benchmark(
+    var result = try util.benchmark(allocator, solve, .{
         allocator,
-        solve,
-        .{
-            allocator,
-            @embedFile("input.txt"),
-            2000000,
-        },
-        .{},
-    );
+        @embedFile("input.txt"),
+        2000000,
+    }, .{});
     defer result.deinit();
     result.printSummary();
 }

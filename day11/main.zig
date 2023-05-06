@@ -181,9 +181,9 @@ pub fn main() !void {
     const sol = try solve(allocator, @embedFile("input.txt"));
     std.debug.print("Part 1: {d}\nPart 2: {d}\n", .{ sol[0], sol[1] });
 
-    // var result = try util.benchmark(allocator, solve, .{ allocator, @embedFile("input.txt") }, .{});
-    // defer result.deinit();
-    // result.printSummary();
+    var result = try util.benchmark(allocator, solve, .{ allocator, @embedFile("input.txt") }, .{.warmup = 10, .trials=1000});
+    defer result.deinit();
+    result.printSummary();
 }
 
 test "test-input" {

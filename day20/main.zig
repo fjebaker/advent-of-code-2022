@@ -114,6 +114,7 @@ fn solve(alloc: std.mem.Allocator, input: [] const u8) ![2]u64 {
 
     mixer.decrypt();
 
+    // rescale numbers
     for (numbers.items) |*n| {
         n.* *= 811589153;
     }
@@ -127,7 +128,6 @@ fn solve(alloc: std.mem.Allocator, input: [] const u8) ![2]u64 {
 
     const part1 = mixer.readOut();
     const part2 = mixer2.readOut();
-
     return .{part1,part2};
 }
 

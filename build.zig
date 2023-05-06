@@ -49,7 +49,7 @@ pub fn build(b: *std.build.Builder) void {
     const mode = b.standardReleaseOptions();
 
     comptime var counter : usize = 1;
-    inline while (counter <= 20) {
+    inline while (counter <= 21) {
         setup_day(b, target, mode, counter);
         counter += 1;
     }

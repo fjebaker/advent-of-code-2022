@@ -5,19 +5,16 @@ const ResourceList = struct {
     obsidian: u32 = 0,
     clay: u32 = 0,
     ore: u32 = 0,
-
     pub fn subtract(self: *ResourceList, other: ResourceList) void {
         inline for (ResourceFields) |field| {
             @field(self, field.name) -= @field(other, field.name);
         }
     }
-
     pub fn add(self: *ResourceList, other: ResourceList) void {
         inline for (ResourceFields) |field| {
             @field(self, field.name) += @field(other, field.name);
         }
     }
-
     pub fn mult(self: ResourceList, factor: u32) ResourceList {
         var copy: ResourceList = self;
         inline for (ResourceFields) |field| {
